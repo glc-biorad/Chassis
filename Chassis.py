@@ -1,65 +1,73 @@
 '''
-DESCRIPTION:
-This module contains the Chassis object for controlling relay valves.
-
-AUTHOR:
-G.LC
-
-AFFILIATION:
-Bio-Rad, CDG, Advanced-Tech Team
-
-# CREATED ON:
-9/1/2022
 '''
 
-from commands import commands
+import sys
+import time
 
-from utils import replace_address, replace_word
+def check_type(value, want_type):
+    if want_type == int:
+        value = int(value)
+    elif want_type == float:
+        value = int(value)
+    if type(value) != want_type:
+        sys.exit("ERROR (utils, check_type): value ({0}) is not the valid type ({1})".format(value, want_type))
 
-class Chassis():
-    # Public variables.
-    controller = None
+def check_if_dir_valid(direction):
+    valid_directions = [1, -1]
+    if direction not in valid_directions:
+        sys.exit("ERROR (utils, check_if_dir_valid): direction ({0}) is not valid ({1})".format(direction, valid_directions))
 
-    # Private variables.
-    __id = None
-    __relay_state = None # [0;OFF,1-ON] Following IEC 60417-5008 and IEC 60417-5007, respectively 
-    __commands = commands['chassis']
-    __address = None
+def check_array_size(array, size):
+    if len(array) != size:
+        sys.exit("ERROR (utils, check_array_size): size ({0}) mismatch from actual array size ({1})".format(size, len(array)))
 
-    # Constructor.
-    def __init__(self, controller, id=None, address=None):
-        self.controller = controller
-        self.__id = id
-        self.__address = address
+def check_limit(value, limit, mode='<', verbose=True):
+    '''
+    Check if value {mode} limit
+        e.g.  value < limit
+    '''
+    modes = ['<', '>', '>=', '<=', '==', '=', '!=']
 
-        # Set the default settings.
-        self.__relay_state = 0 # OFF (IEC 60417-5008)
+    # Make sure given mode is in the valid modes.
+    if mode in modes:
+        if mode == '<':
+            if value < limit:
+                return True
+        elif mode == '>':
+            if value > limit:
+                return True
+        elif mode == '>=':
+            if value >= limit:
+                return True
+        elif mode == '<=':
+            if value <= limit:
+                return True
+        elif mode == '==' or mode == '=':
+            if value == limit:
+                return True
+        elif mode == '!=':
+            if value != limit:
+                return True
+        if verbose:
+            print("WARNING (utils, check_limit): {0} {1} {2} is False...".format(value, mode, limit))
+        return False
+    sys.exit("ERROR (utils, check_limit): mode ({0}) is not valid!".format(mode))
 
-    # Getter Methods
-    def get_id(self):
-        return self.__id
-    def get_relay_state(self):
-        return self.__relay_state
+def replace_address(command_byte_string, address):
+        # Replace address depending on the address.
+        if address < 10:
+            return command_byte_string.replace(b'address', b'0' + str(address).encode('utf-8'))
+        elif address >= 10:
+            return command_byte_string.replace(b'address', str(address).encode('utf-8'))
 
-    # Relayon Method
-    def relayon(self, channel):
-        # Get the relayon command.
-        command = self.__commands['relayon']
-        # Repalce the address.
-        command = replace_address(command, self.__address)
-        # Replace the channel.
-        command = replace_word(command, 'channel', channel)
-        # Send the command.
-        self.controller.write(command)
-        self.__relay_state = 1 # ON (IEC 60417-5007)
+def replace_word(command_byte_string, word_string, word_value):
+        return command_byte_string.replace(word_string.encode('utf-8'), str(word_value).encode('utf-8'))
 
-    # Relayoff Method
-    def relayoff(self, channel):
-        # Get the relayoff command.
-        command = self.__commands['relayoff']
-        # Replace the address.
-        command = replace_address(command, self.__address)
-        # Replace the channel.
-        command = replace_word(command, 'channel', channel)
-        # Send the command.
-        self.__relay_state = 0 # OFF (IEC 60417-5008)
+def wait(controller, wait_for='\r', timeout=10, verbose=True):
+    time_start = time.time()
+    while time.time() - time_start < timeout:
+        response = controller.read().decode()
+        if response == wait_for:
+            break
+    if verbose:
+        print("WARNING (utils, wait): timeout ({0} seconds) reached and {1} has not been found....".format(timeout, wait_for))
